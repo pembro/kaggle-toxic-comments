@@ -37,4 +37,5 @@ vignettes/*.pdf
 *.html
 
 # Data folder
-data/
+data/*
+!data/.gitignore
