@@ -15,8 +15,8 @@ library(ggplot2)
 Load the data
 
 ```{r}
-train_set <- read.csv("./data/train.csv", stringsAsFactors = FALSE)
-test_set <- read.csv("./data/test.csv", stringsAsFactors = FALSE)
+train_set <- read.csv("../data/train.csv", stringsAsFactors = FALSE)
+test_set <- read.csv("../data/test.csv", stringsAsFactors = FALSE)
 
 head(train_set)
 ```
@@ -24,7 +24,6 @@ head(train_set)
 Create corpus and document term matrix
 
 ```{r}
-
 train_corpus <- SimpleCorpus(VectorSource(train_set$comment_text),
                              control = list(language = "en"))
 
@@ -90,7 +89,6 @@ head(other_class)
 And now plot!
 
 ```{r fig.width=8, fig.height=4.5}
-# And plot
 filter(other_class, other_class != type) %>%
   ggplot(aes(x = other_class, y = percentage, fill = other_class)) + facet_wrap(~ type, ncol = 3) + geom_col() +
   theme_bw() + scale_y_continuous(labels = scales::percent) + scale_fill_brewer(palette = "BrBG") + 
@@ -99,6 +97,19 @@ filter(other_class, other_class != type) %>%
 
 ```
 
-So it seem that any comment that falls into category other than "toxic" is also a "toxic" comment.
+So it seems that any comment that falls into category other than "toxic" is also a "toxic" comment.
 The reverse however does not seem to be true. "Toxic" appears to be a catch-all term.
+
+# How are different types of comments correlated
+
+```{r}
+train_bad <- train_set[rowSums(train_set[, 3:8]) > 0, 3:8]
+corrplot::corrplot(cor(train_bad))
+```
+
+How are comments similar?
+
+```{r}
+plot(hclust(dist(cor(train_bad))), main = "Comment types", sub = "", xlab = "")
+```
 
