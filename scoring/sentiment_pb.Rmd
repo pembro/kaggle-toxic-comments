@@ -1,0 +1,96 @@
+---
+title: "Naive dictionary approach"
+output: html_notebook
+---
+
+```{r setup}
+library(dplyr)
+library(tidytext)
+library(tm)
+library(sentimentr)
+library(ggplot2)
+
+source("../utils/kaggle_score.R")
+```
+
+
+Load the data
+
+```{r}
+train_set <- read.csv("../data/train.csv", stringsAsFactors = FALSE)
+test_set <- read.csv("../data/test.csv", stringsAsFactors = FALSE)
+
+head(train_set)
+```
+
+Create corpus and document term matrix
+
+```{r}
+train_corpus <- SimpleCorpus(VectorSource(train_set$comment_text),
+                             control = list(language = "en"))
+
+train_dtm <- DocumentTermMatrix(train_corpus, control = list(tokenize = "words",
+                                                             tolower = TRUE,
+                                                             removePunctuation = TRUE,
+                                                             removeNumbers = TRUE,
+                                                             stopwords = TRUE))
+
+train_dtm <- train_dtm[, !colnames(train_dtm) %in% lexicon::function_words]
+
+inspect(train_dtm)
+```
+
+Create a list of terms common to each document type
+
+```{r}
+# First tidy the DTM
+train_t <- tidy(train_dtm)
+
+# Add good comments category
+train_set$good_comments <- ifelse(rowSums(train_set[, 3:8]) > 0, 0L, 1L)
+
+# Which documents are classified as good, toxic, severe toxic, etc.
+comment_types <- lapply(train_set[, 3:9], function(x) (1:length(x))[x == 1])
+
+# Summarise term frequency for each type of comment
+train_freqs <- lapply(comment_types, function(x) { 
+  filter(train_t, document %in% x) %>%
+  group_by(term) %>%
+  summarise(count = sum(count))
+})
+
+# Add column with document name (toxic, severe toxic etc.)
+train_freqs <- lapply(names(train_freqs), function(x) mutate(train_freqs[[x]], document = x))
+
+# Cast into DTM with summarised document types
+doc_types <- cast_dtm(bind_rows(train_freqs), document, term, count)
+
+inspect(doc_types)
+```
+
+Create custom sentiment dictionary for each comment type 
+
+```{r}
+doc_types <- as.TermDocumentMatrix(doc_types)
+
+bad_dicts <- lapply(names(train_set[, 3:8]), function(x) {
+  toxic.freq <- as.matrix(doc_types[, c("good_comments", x)])
+  
+  toxic.freq[, 1] <- toxic.freq[, 1] / sum(toxic.freq[, 1])
+  toxic.freq[, 2] <- toxic.freq[, 2] / sum(toxic.freq[, 2])
+  rmeans <- rowMeans(toxic.freq)
+  toxic.freq[, 1] <- toxic.freq[, 1] - rmeans
+  toxic.freq[, 2] <- toxic.freq[, 2] - rmeans
+  
+  toxic.dict <- tibble::rownames_to_column(as.data.frame(toxic.freq[, 1]), "term")
+  names(toxic.dict)[2] <- "score"
+  toxic.dict$score <- toxic.dict$score * (-1 / min(toxic.dict$score))
+  
+  toxic.dict
+})
+
+names(bad_dicts) <- names(train_set[, 3:8])
+```
+
+Run sentiment analysis on the dataset
+
