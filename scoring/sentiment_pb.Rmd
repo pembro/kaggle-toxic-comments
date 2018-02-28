@@ -20,6 +20,8 @@ Load the data
 train_set <- read.csv("../data/train.csv", stringsAsFactors = FALSE)
 test_set <- read.csv("../data/test.csv", stringsAsFactors = FALSE)
 
+category_names <- names(train_set[, 3:8])
+
 head(train_set)
 ```
 
@@ -73,7 +75,7 @@ Create custom sentiment dictionary for each comment type
 ```{r}
 doc_types <- as.TermDocumentMatrix(doc_types)
 
-bad_dicts <- lapply(names(train_set[, 3:8]), function(x) {
+bad_dicts <- lapply(category_names, function(x) {
   toxic.freq <- as.matrix(doc_types[, c("good_comments", x)])
   
   toxic.freq[, 1] <- toxic.freq[, 1] / sum(toxic.freq[, 1])
@@ -85,12 +87,31 @@ bad_dicts <- lapply(names(train_set[, 3:8]), function(x) {
   toxic.dict <- tibble::rownames_to_column(as.data.frame(toxic.freq[, 1]), "term")
   names(toxic.dict)[2] <- "score"
   toxic.dict$score <- toxic.dict$score * (-1 / min(toxic.dict$score))
-  
-  toxic.dict
+  res <- suppressWarnings(as_key(toxic.dict))
+  res
 })
 
-names(bad_dicts) <- names(train_set[, 3:8])
+names(bad_dicts) <- category_names
 ```
 
-Run sentiment analysis on the dataset
+Run sentiment analysis on the dataset (30k comments)
+
+```{r}
+comments_text <- get_sentences(train_set$comment_text[1:30000])
+comment_sentiments <- lapply(category_names, function(x) {
+  -sentiment_by(comments_text, polarity_dt = bad_dicts[[x]])$ave_sentiment
+})
+
+names(comment_sentiments) <- category_names
+comment_sentiments <- as.data.frame(comment_sentiments)
+```
+
+Now let's check how the initial 30k comments were classified
+
+```{r}
+kaggle_score(comment_sentiments, train_set[1:30000, 3:8])
+```
+
+Initial AUC of 0.91
+
 
