@@ -9,6 +9,8 @@ library(tidytext)
 library(tm)
 library(sentimentr)
 library(ggplot2)
+library(foreach)
+library(doParallel)
 
 source("../utils/kaggle_score.R")
 ```
@@ -114,4 +116,48 @@ kaggle_score(comment_sentiments, train_set[1:30000, 3:8])
 
 Initial AUC of 0.91
 
+# Scoring the test set
 
+Create a parallel cluster
+
+```{r}
+cl <- makeCluster(3) # memory requirements go up quite a bit with more (each one requires ~4-5GB)
+registerDoParallel(cl)
+```
+
+Calculate scores for each test set
+
+```{r}
+test_texts <- get_sentences(test_set$comment_text)
+test_sentiments <- foreach(category=category_names) %dopar% {
+  -sentimentr::sentiment_by(test_texts, polarity_dt = bad_dicts[[category]])$ave_sentiment
+}
+
+names(test_sentiments) <- category_names
+test_sentiments <- as.data.frame(test_sentiments)
+
+head(test_sentiments)
+```
+
+Now stop the cluster
+
+```{r}
+stopCluster(cl)
+```
+
+Rescale sentiment scores into probabilities [0, 1] and add id information
+
+```{r}
+test_submission <- sapply(test_sentiments, function(x) {
+  minx <- min(x)
+  maxx <- max(x)
+  rangex <- maxx - minx
+  return((x - minx) / rangex)
+})
+test_submission <- as.data.frame(test_submission)
+test_submission$id <- test_set$id
+test_submission <- test_submission[, c("id", "toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate")]
+write.csv(test_submission, row.names = FALSE, file = "../submissions/sentiment_pb.csv")
+```
+
+And submitted to kaggle with a score of 0.9083
