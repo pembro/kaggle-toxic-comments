@@ -1,0 +1,52 @@
+---
+title: "LSA & neural network approach"
+output: html_notebook
+---
+
+```{r setup}
+library(dplyr)
+library(tidytext)
+library(tm)
+library(lsa)
+
+source("../utils/kaggle_score.R")
+```
+
+Load the data
+
+```{r}
+train_set <- read.csv("../data/train.csv", stringsAsFactors = FALSE)
+test_set <- read.csv("../data/test.csv", stringsAsFactors = FALSE)
+
+category_names <- names(train_set[, 3:8])
+
+head(train_set)
+```
+
+Create corpus and document term matrix
+
+```{r}
+train_corpus <- SimpleCorpus(VectorSource(train_set$comment_text),
+                             control = list(language = "en"))
+
+train_corpus %>%
+  tm_map(content_transformer(tolower)) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removeWords, lexicon::function_words) -> train_corpus
+
+inspect(train_corpus[1:2])
+```
+
+
+```{r}
+train_tdm <- TermDocumentMatrix(train_corpus)
+
+train_lsa <- lsa(train_tdm)
+```
+
+Too big :(
+
+
+
+
